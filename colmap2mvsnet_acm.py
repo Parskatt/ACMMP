@@ -277,7 +277,28 @@ def rotmat2qvec(R):
 
 
 
-def calc_score(inputs, images, points3d, extrinsic, args):
+def calc_score(images, points3d, extrinsic):
+    id_3d = [np.array([pt for pt in images[i].point3D_ids if pt != -1]) for i in range(1,len(images)+1)]
+    cam_centers = [-np.matmul(extrinsic[i][:3, :3].transpose(), extrinsic[i][:3, 3:4])[:, 0][None] for i in range(1, len(extrinsic)+1)] #N, 1, 3
+    S = np.zeros((len(images), len(images)))
+    points3d_np = np.zeros((max(points3d.keys())+1, 3))
+    for k in points3d.keys():
+        points3d_np[k] = points3d[k].xyz
+    for i in range(len(images)):
+        print(i)
+        for j in range(i+1, len(images)):
+            points3d_ij = np.intersect1d(id_3d[i], id_3d[j])
+            p = points3d_np[points3d_ij]
+            score_ij = len(points3d_ij)
+            if score_ij > 0:
+                angles = (180 / np.pi) * np.arccos(((cam_centers[i] - p)*(cam_centers[j] - p)).sum(axis=-1) / (np.linalg.norm(cam_centers[i] - p, axis = -1) * np.linalg.norm(cam_centers[j] - p, axis = -1) + 1e-6)) # triangulation angle
+                angles_sorted = np.sort(angles)
+                triangulationangle = angles_sorted[int(len(angles_sorted) * 0.75)]
+                if triangulationangle < 1:
+                    score_ij = 0.0
+            S[i,j] = score_ij
+            S[j,i] = score_ij
+    return S
     i, j = inputs
     id_i = images[i+1].point3D_ids
     id_j = images[j+1].point3D_ids
@@ -371,7 +392,7 @@ def processing_single_scene(args):
             if p3d_id == -1:
                 continue
             transformed = np.matmul(extrinsic[i+1], [points3d[p3d_id].xyz[0], points3d[p3d_id].xyz[1], points3d[p3d_id].xyz[2], 1])
-            zs.append(np.asscalar(transformed[2]))
+            zs.append(transformed[2].item())
         zs_sorted = sorted(zs)
         # relaxed depth range
         depth_min = zs_sorted[int(len(zs) * .01)] * 0.75
@@ -402,12 +423,13 @@ def processing_single_scene(args):
         for j in range(i + 1, len(images)):
             queue.append((i, j))
 
-    p = mp.Pool(processes=mp.cpu_count())
-    func = partial(calc_score, images=images, points3d=points3d, args=args, extrinsic=extrinsic)
-    result = p.map(func, queue)
-    for i, j, s in result:
-        score[i, j] = s
-        score[j, i] = s
+    score = calc_score(images, points3d, extrinsic)
+    #p = mp.Pool(processes=mp.cpu_count())
+    #func = partial(calc_score, images=images, points3d=points3d, args=args, extrinsic=extrinsic)
+    #result = p.map(func, queue)
+    #for i, j, s in result:
+    #    score[i, j] = s
+    #    score[j, i] = s
     view_sel = []
     num_view = min(20, len(images) - 1)
     for i in range(len(images)):

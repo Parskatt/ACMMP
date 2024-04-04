@@ -398,6 +398,7 @@ int main(int argc, char** argv)
 
     std::string dense_folder = argv[1];
     std::vector<Problem> problems;
+    std::cout << "Generating the sample list!" << std::endl;
     GenerateSampleList(dense_folder, problems);
 
     std::string output_folder = dense_folder + std::string("/ACMMP");

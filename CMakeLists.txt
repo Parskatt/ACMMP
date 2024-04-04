@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 2.8)
 project (ACMMP)
 
-set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-8.0")
+
 find_package(CUDA 6.0 REQUIRED ) # For Cuda Managed Memory and c++11
 find_package(OpenCV REQUIRED )
 
@@ -9,7 +9,7 @@ find_package(OpenCV REQUIRED )
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(.)
 
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3 --use_fast_math --maxrregcount=128 --ptxas-options=-v -std=c++11 --compiler-options -Wall -gencode arch=compute_60,code=sm_60)
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3 --use_fast_math --maxrregcount=128 --ptxas-options=-v -std=c++14 --compiler-options -Wall -gencode arch=compute_75,code=sm_75)
 if(CMAKE_COMPILER_IS_GNUCXX)
     add_definitions(-std=c++11)
     add_definitions(-pthread)
