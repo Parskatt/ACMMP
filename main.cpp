@@ -1,6 +1,18 @@
 #include "main.h"
 #include "ACMMP.h"
 
+
+namespace acmmp {
+namespace {
+
+const char* ACMMP_VERSION = "0.1-parskatt-fork";
+
+}
+}  // namespace
+
+
+typedef std::function<void(int, char**)> command_func_t;
+
 void GenerateSampleList(const std::string &dense_folder, std::vector<Problem> &problems)
 {
     std::string cluster_list_path = dense_folder + std::string("/pair.txt");
@@ -237,9 +249,24 @@ void JointBilateralUpsampling(const std::string &dense_folder, const Problem &pr
     RunJBU(scaled_image_float, ref_depth, dense_folder, problem );
 }
 
-void RunFusion(std::string &dense_folder, const std::vector<Problem> &problems, bool geom_consistency)
+void RunFusion(int argc, char** argv)
 {
+    if (argc < 2) {
+        std::cout << "Usage: ACMMP stereo_fusion DATABASE" << std::endl;
+        return;
+    }
+    std::string dense_folder = argv[1];
+    std::vector<Problem> problems;
+    std::cout << "Generating the sample list!" << std::endl;
+    GenerateSampleList(dense_folder, problems);
+
+    std::string output_folder = dense_folder + std::string("/ACMMP");
+    mkdir(output_folder.c_str(), 0777);
+
+
+    bool geom_consistency = true;
     size_t num_images = problems.size();
+    std::cout << "There are " << num_images << " problems needed to be processed!" << std::endl;
     std::string image_folder = dense_folder + std::string("/images");
     std::string cam_folder = dense_folder + std::string("/cams");
 
@@ -389,24 +416,24 @@ void RunFusion(std::string &dense_folder, const std::vector<Problem> &problems, 
     StoreColorPlyFileBinaryPointCloud (ply_path, PointCloud);
 }
 
-int main(int argc, char** argv)
-{
+void RunPatchMatchStereo(int argc, char** argv){
     if (argc < 2) {
-        std::cout << "USAGE: ACMMP dense_folder" << std::endl;
-        return -1;
+        std::cout << "Usage: ACMMP patch_match_stereo dense_folder" << std::endl;
+        return;
     }
-
     std::string dense_folder = argv[1];
     std::vector<Problem> problems;
     std::cout << "Generating the sample list!" << std::endl;
     GenerateSampleList(dense_folder, problems);
 
     std::string output_folder = dense_folder + std::string("/ACMMP");
+    std::cout << "Making ACMMP Folder" << std::endl;
     mkdir(output_folder.c_str(), 0777);
+
+
 
     size_t num_images = problems.size();
     std::cout << "There are " << num_images << " problems needed to be processed!" << std::endl;
-
     int max_num_downscale = ComputeMultiScaleSettings(dense_folder, problems);
 
      int flag = 0;
@@ -475,9 +502,68 @@ int main(int argc, char** argv)
 
         max_num_downscale--;
     }
+}
 
-    geom_consistency = true;
-    RunFusion(dense_folder, problems, geom_consistency);
 
-    return 0;
+
+int ShowHelp(
+    const std::vector<std::pair<std::string, command_func_t>>& commands) {
+  std::cout << "ACMMP "
+            << acmmp::ACMMP_VERSION
+            << " Multi-View Stereo"
+            << std::endl
+            << std::endl;
+
+  std::cout << "Usage:" << std::endl;
+  std::cout << "  ACMMP [command] [options]" << std::endl << std::endl;
+  std::cout << "Example usage:" << std::endl;
+  std::cout << "  ACMMP help [ -h, --help ]" << std::endl;
+  std::cout << "  ACMMP patch_match_stereo DATABASE"
+            << std::endl;
+  std::cout << "  ACMMP stereo_fusion DATABASE"
+            << std::endl;
+  std::cout << "Available commands:" << std::endl;
+  std::cout << "  help" << std::endl;
+  for (const auto& command : commands) {
+    std::cout << "  " << command.first << std::endl;
+  }
+  std::cout << std::endl;
+
+  return EXIT_SUCCESS;
+}
+
+int main(int argc, char** argv) {
+  std::vector<std::pair<std::string, command_func_t>> commands;
+  commands.emplace_back("patch_match_stereo", &RunPatchMatchStereo);
+  commands.emplace_back("stereo_fusion", &RunFusion);
+
+
+  if (argc == 1) {
+    return ShowHelp(commands);
+  }
+
+  const std::string command = argv[1];
+  if (command == "help" || command == "-h" || command == "--help") {
+    return ShowHelp(commands);
+  } else {
+    command_func_t matched_command_func = nullptr;
+    for (const auto& command_func : commands) {
+      if (command == command_func.first) {
+        matched_command_func = command_func.second;
+        break;
+      }
+    }
+    if (matched_command_func == nullptr) {
+      std::cout << "Command " << command.c_str() << " not recognized. To list the "
+          "available commands, run `ACMMP help`.\n";
+      return -1;
+    } else {
+      int command_argc = argc - 1;
+      char** command_argv = &argv[1];
+      command_argv[0] = argv[0];
+      matched_command_func(command_argc, command_argv);
+    }
+  }
+
+  return ShowHelp(commands);
 }
